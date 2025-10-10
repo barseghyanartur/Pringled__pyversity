@@ -12,8 +12,8 @@ def _exp_zscore_weights(relevance: np.ndarray, beta: float) -> np.ndarray:
 
 
 def dpp(
-    relevances: np.ndarray,
     embeddings: np.ndarray,
+    scores: np.ndarray,
     k: int,
     beta: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -24,58 +24,67 @@ def dpp(
     maximizing the determinant of a kernel matrix that balances item relevance
     and pairwise similarity.
 
-    :param relevances: 1D array of relevance scores for each item.
     :param embeddings: 2D array of shape (n_samples, n_features).
+    :param scores: 1D array of relevance scores for each item.
     :param k: Number of items to select.
     :param beta: Controls the influence of relevance scores in the DPP kernel.
                  Higher values increase the emphasis on relevance.
     :return: Tuple of selected indices and their marginal gains.
     """
-    relevance_scores, feature_matrix, top_k, early_exit = prepare_inputs(relevances, embeddings, k)
+    # Prepare inputs
+    relevance_scores, feature_matrix, top_k, early_exit = prepare_inputs(scores, embeddings, k)
     if early_exit:
+        # Nothing to select: return empty arrays
         return np.empty(0, np.int32), np.empty(0, np.float32)
 
+    # Normalize feature vectors to unit length for cosine similarity
     feature_matrix = normalize_rows(feature_matrix)
 
     num_items = feature_matrix.shape[0]
     weights = _exp_zscore_weights(relevance_scores, beta)
 
-    # Diagonal of L plus jitter is the initial residual variance.
+    # Initial residual variance is the weighted self-similarity
     residual_variance = (weights * weights + float(EPS32)).astype(np.float32, copy=False)
 
-    # Columns will store orthogonalized update components.
+    # Initialize selection state
     component_matrix = np.zeros((num_items, top_k), dtype=np.float32)
-
     selected_indices = np.empty(top_k, dtype=np.int32)
     marginal_gains = np.empty(top_k, dtype=np.float32)
     selected_mask = np.zeros(num_items, dtype=bool)
 
-    t = 0
-    for t in range(top_k):
+    step = 0
+    for step in range(top_k):
+        # Select item with highest residual variance
         residual_variance[selected_mask] = -np.inf
         best_index = int(np.argmax(residual_variance))
-        best_gain = float(residual_variance[best_index])
+        best_score = float(residual_variance[best_index])
 
-        selected_indices[t] = best_index
-        marginal_gains[t] = best_gain
+        selected_indices[step] = best_index
+        marginal_gains[step] = best_score
         selected_mask[best_index] = True
 
-        if t == top_k - 1 or best_gain <= 0.0:
-            t += 1
+        if step == top_k - 1 or best_score <= 0.0:
+            # No more items to select or no positive gain
+            step += 1
             break
 
+        # Update residual variance using the new component
         weighted_similarity_to_best = (weights * (feature_matrix @ feature_matrix[best_index])) * weights[best_index]
 
-        if t > 0:
-            projected_component: np.ndarray = component_matrix[:, :t] @ component_matrix[best_index, :t]
+        if step > 0:
+            # Project out the component in the span of previously selected items
+            projected_component: np.ndarray = component_matrix[:, :step] @ component_matrix[best_index, :step]
         else:
+            # No previous components, so projection is zero
             projected_component = np.zeros(num_items, dtype=np.float32)
 
-        sqrt_best_gain = np.float32(np.sqrt(best_gain))
-        update_component = (weighted_similarity_to_best - projected_component) / (sqrt_best_gain + EPS32)
+        # Compute update component
+        sqrt_best_score = np.float32(np.sqrt(best_score))
+        update_component = (weighted_similarity_to_best - projected_component) / (sqrt_best_score + EPS32)
 
-        component_matrix[:, t] = update_component
+        # Update component matrix and residual variance
+        component_matrix[:, step] = update_component
         residual_variance -= update_component * update_component
         np.maximum(residual_variance, 0.0, out=residual_variance)
 
-    return selected_indices[:t], marginal_gains[:t]
+    return selected_indices[:step], marginal_gains[:step]
