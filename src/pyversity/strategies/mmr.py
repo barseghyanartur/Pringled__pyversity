@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyversity.datatypes import Metric
+from pyversity.datatypes import DiversificationResult, Metric
 from pyversity.strategies.utils import greedy_select
 
 
@@ -11,7 +11,7 @@ def mmr(
     lambda_param: float = 0.5,
     metric: Metric = Metric.COSINE,
     normalize: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> DiversificationResult:
     """
     Maximal Marginal Relevance (MMR) selection.
 
@@ -26,7 +26,8 @@ def mmr(
                   1.0 = pure relevance, 0.0 = pure diversity.
     :param metric: Similarity metric to use. Default is Metric.COSINE.
     :param normalize: Whether to normalize embeddings before computing similarity.
-    :return: Tuple of selected indices and their marginal gains.
+    :return: A DiversificationResult containing the selected item indices,
+      their marginal gains, the strategy used, and the parameters.
     """
     return greedy_select(
         "mmr",

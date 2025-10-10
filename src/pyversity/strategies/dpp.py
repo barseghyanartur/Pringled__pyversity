@@ -1,5 +1,6 @@
 import numpy as np
 
+from pyversity.datatypes import DiversificationResult, Strategy
 from pyversity.utils import EPS32, normalize_rows, prepare_inputs
 
 
@@ -16,7 +17,7 @@ def dpp(
     scores: np.ndarray,
     k: int,
     beta: float = 1.0,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> DiversificationResult:
     """
     Greedy determinantal point process (DPP) selection.
 
@@ -29,14 +30,19 @@ def dpp(
     :param k: Number of items to select.
     :param beta: Controls the influence of relevance scores in the DPP kernel.
                  Higher values increase the emphasis on relevance.
-    :return: Tuple of selected indices and their marginal gains.
+    :return: A DiversificationResult containing the selected item indices,
+      their marginal gains, the strategy used, and the parameters.
     """
     # Prepare inputs
     feature_matrix, relevance_scores, top_k, early_exit = prepare_inputs(embeddings, scores, k)
     if early_exit:
         # Nothing to select: return empty arrays
-        return np.empty(0, np.int32), np.empty(0, np.float32)
-
+        return DiversificationResult(
+            indices=np.empty(0, np.int32),
+            marginal_gains=np.empty(0, np.float32),
+            strategy=Strategy.DPP,
+            parameters={"beta": beta},
+        )
     # Normalize feature vectors to unit length for cosine similarity
     feature_matrix = normalize_rows(feature_matrix)
 
@@ -87,4 +93,9 @@ def dpp(
         residual_variance -= update_component * update_component
         np.maximum(residual_variance, 0.0, out=residual_variance)
 
-    return selected_indices[:step], marginal_gains[:step]
+    return DiversificationResult(
+        indices=selected_indices[:step],
+        marginal_gains=marginal_gains[:step],
+        strategy=Strategy.DPP,
+        parameters={"beta": beta},
+    )

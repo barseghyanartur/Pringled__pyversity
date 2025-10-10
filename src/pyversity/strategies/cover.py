@@ -1,6 +1,6 @@
 import numpy as np
 
-from pyversity.datatypes import Metric
+from pyversity.datatypes import DiversificationResult, Metric, Strategy
 from pyversity.utils import normalize_rows, pairwise_similarity, prepare_inputs
 
 
@@ -12,7 +12,7 @@ def cover(
     gamma: float = 0.5,
     metric: Metric = Metric.COSINE,
     normalize: bool = True,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> DiversificationResult:
     """
     Select a subset of items that balances relevance and coverage.
 
@@ -27,7 +27,8 @@ def cover(
     :param gamma: Concavity parameter in (0, 1]; lower values emphasize diversity.
     :param metric: Similarity metric to use. Default is Metric.COSINE.
     :param normalize: Whether to normalize embeddings before computing similarity.
-    :return: Tuple of selected indices and their marginal gains.
+    :return: A DiversificationResult containing the selected item indices,
+      their marginal gains, the strategy used, and the parameters.
     :raises ValueError: If theta is not in [0, 1].
     :raises ValueError: If gamma is not in (0, 1].
     """
@@ -37,11 +38,22 @@ def cover(
     if not (0.0 < float(gamma) <= 1.0):
         raise ValueError("gamma must be in (0, 1]")
 
+    params = {
+        "theta": theta,
+        "gamma": gamma,
+        "metric": metric,
+    }
+
     # Prepare inputs
     feature_matrix, relevance_scores, top_k, early_exit = prepare_inputs(embeddings, scores, k)
     if early_exit:
         # Nothing to select: return empty arrays
-        return np.empty(0, np.int32), np.empty(0, np.float32)
+        return DiversificationResult(
+            indices=np.empty(0, np.int32),
+            marginal_gains=np.empty(0, np.float32),
+            strategy=Strategy.COVER,
+            parameters=params,
+        )
 
     if metric == Metric.COSINE and normalize:
         # Normalize feature vectors to unit length for cosine similarity
@@ -51,7 +63,12 @@ def cover(
         # Pure relevance: select top-k by relevance scores
         topk = np.argsort(-relevance_scores)[:top_k].astype(np.int32)
         gains = relevance_scores[topk].astype(np.float32, copy=False)
-        return topk, gains
+        return DiversificationResult(
+            indices=topk,
+            marginal_gains=gains,
+            strategy=Strategy.COVER,
+            parameters=params,
+        )
 
     # Compute non-negative similarities for coverage to avoid concave-power NaNs
     similarity_matrix = pairwise_similarity(feature_matrix, metric)
@@ -82,4 +99,9 @@ def cover(
         # Update accumulated coverage
         accumulated_coverage += similarity_matrix[:, best_index]
 
-    return selected_indices, marginal_gains
+    return DiversificationResult(
+        indices=selected_indices,
+        marginal_gains=marginal_gains,
+        strategy=Strategy.COVER,
+        parameters=params,
+    )

@@ -2,7 +2,7 @@ from typing import Literal
 
 import numpy as np
 
-from pyversity.datatypes import Metric
+from pyversity.datatypes import DiversificationResult, Metric, Strategy
 from pyversity.utils import normalize_rows, prepare_inputs, vector_similarity
 
 
@@ -15,7 +15,7 @@ def greedy_select(
     metric: Metric,
     normalize: bool,
     lambda_param: float,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> DiversificationResult:
     """
     Greedy selection for MMR/MSD strategies.
 
@@ -32,7 +32,8 @@ def greedy_select(
     :param normalize: Whether to normalize embeddings before computing similarity.
     :param lambda_param: Trade-off parameter in [0, 1].
                   1.0 = pure relevance, 0.0 = pure diversity.
-    :return: Tuple of selected indices and their marginal gains.
+    :return: A DiversificationResult containing the selected item indices,
+      their marginal gains, the strategy used, and the parameters.
     :raises ValueError: If lambda_param is not in [0, 1].
     :raises ValueError: If input shapes are inconsistent.
     """
@@ -40,11 +41,21 @@ def greedy_select(
     if not (0.0 <= float(lambda_param) <= 1.0):
         raise ValueError("lambda_param must be in [0, 1]")
 
+    params = {
+        "lambda_param": lambda_param,
+        "metric": metric,
+    }
+
     # Prepare inputs
     feature_matrix, relevance_scores, top_k, early_exit = prepare_inputs(embeddings, scores, k)
     if early_exit:
         # Nothing to select: return empty arrays
-        return np.empty(0, np.int32), np.empty(0, np.float32)
+        return DiversificationResult(
+            indices=np.empty(0, np.int32),
+            marginal_gains=np.empty(0, np.float32),
+            strategy=Strategy.MMR if strategy == "mmr" else Strategy.MSD,
+            parameters=params,
+        )
 
     if metric == Metric.COSINE and normalize:
         # Normalize feature vectors to unit length for cosine similarity
@@ -93,4 +104,9 @@ def greedy_select(
         marginal_gains[step] = float(candidate_scores[best_index])
         selected_mask[best_index] = True
 
-    return selected_indices, marginal_gains
+    return DiversificationResult(
+        indices=selected_indices,
+        marginal_gains=marginal_gains,
+        strategy=Strategy.MMR if strategy == "mmr" else Strategy.MSD,
+        parameters=params,
+    )
