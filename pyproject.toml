@@ -26,8 +26,13 @@ dependencies = [
     "numpy"
 ]
 
+[project.urls]
+"Homepage" = "https://github.com/Pringled/pyversity"
+"Bug Reports" = "https://github.com/Pringled/pyversity/issues"
+"Source" = "https://github.com/Pringled/pyversity"
+
 [build-system]
-requires = ["setuptools>=64", "setuptools_scm>=8"]
+requires = ["setuptools>=64"]
 build-backend = "setuptools.build_meta"
 
 [project.optional-dependencies]
@@ -86,14 +91,14 @@ ignore_missing_imports = true
 
 [tool.setuptools]
 package-dir = {"" = "src"}
-license-files = []
+license-files = ["LICENSE*"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["pyversity*"]
 
-[tool.setuptools_scm]
-# can be empty if no extra settings are needed, presence enables setuptools_scm
+[tool.setuptools.package-data]
+pyversity = ["py.typed"]
 
 [tool.setuptools.dynamic]
 version = {attr = "pyversity.version.__version__"}
