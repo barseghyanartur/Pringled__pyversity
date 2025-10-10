@@ -14,7 +14,7 @@ def greedy_select(
     *,
     metric: Metric,
     normalize: bool,
-    lambda_param: float,
+    diversity: float = 0.5,
 ) -> DiversificationResult:
     """
     Greedy selection for MMR/MSD strategies.
@@ -30,21 +30,24 @@ def greedy_select(
     :param k: Number of items to select.
     :param metric: Similarity metric to use. Default is Metric.COSINE.
     :param normalize: Whether to normalize embeddings before computing similarity.
-    :param lambda_param: Trade-off parameter in [0, 1].
-                  1.0 = pure relevance, 0.0 = pure diversity.
+    :param diversity: Trade-off parameter in [0, 1].
+                  1.0 = pure diversity, 0.0 = pure relevance.
     :return: A DiversificationResult containing the selected item indices,
       their marginal gains, the strategy used, and the parameters.
-    :raises ValueError: If lambda_param is not in [0, 1].
+    :raises ValueError: If diversity is not in [0, 1].
     :raises ValueError: If input shapes are inconsistent.
     """
     # Validate parameters
-    if not (0.0 <= float(lambda_param) <= 1.0):
-        raise ValueError("lambda_param must be in [0, 1]")
+    if not (0.0 <= float(diversity) <= 1.0):
+        raise ValueError("diversity must be in [0, 1]")
 
     params = {
-        "lambda_param": lambda_param,
         "metric": metric,
     }
+
+    # Lambda parameter for trade-off between relevance and diversity
+    # This is 1 - diversity to align with common notation
+    lambda_param = 1.0 - diversity
 
     # Prepare inputs
     feature_matrix, relevance_scores, top_k, early_exit = prepare_inputs(embeddings, scores, k)
@@ -54,6 +57,7 @@ def greedy_select(
             indices=np.empty(0, np.int32),
             marginal_gains=np.empty(0, np.float32),
             strategy=Strategy.MMR if strategy == "mmr" else Strategy.MSD,
+            diversity=diversity,
             parameters=params,
         )
 
@@ -108,5 +112,6 @@ def greedy_select(
         indices=selected_indices,
         marginal_gains=marginal_gains,
         strategy=Strategy.MMR if strategy == "mmr" else Strategy.MSD,
+        diversity=diversity,
         parameters=params,
     )

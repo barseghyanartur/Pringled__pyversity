@@ -16,7 +16,7 @@ def dpp(
     embeddings: np.ndarray,
     scores: np.ndarray,
     k: int,
-    beta: float = 1.0,
+    diversity: float = 1.0,
 ) -> DiversificationResult:
     """
     Greedy determinantal point process (DPP) selection.
@@ -28,11 +28,15 @@ def dpp(
     :param embeddings: 2D array of shape (n_samples, n_features).
     :param scores: 1D array of relevance scores for each item.
     :param k: Number of items to select.
-    :param beta: Controls the influence of relevance scores in the DPP kernel.
-                 Higher values increase the emphasis on relevance.
+    :param diversity: Controls the influence of relevance scores in the DPP kernel (beta parameter).
+                      Higher values increase the emphasis on relevance.
     :return: A DiversificationResult containing the selected item indices,
       their marginal gains, the strategy used, and the parameters.
     """
+    # Beta parameter to control relevance influence in DPP kernel.
+    # This is the inverse of diversity to align with common notation.
+    beta = 1 - diversity
+
     # Prepare inputs
     feature_matrix, relevance_scores, top_k, early_exit = prepare_inputs(embeddings, scores, k)
     if early_exit:
@@ -41,7 +45,7 @@ def dpp(
             indices=np.empty(0, np.int32),
             marginal_gains=np.empty(0, np.float32),
             strategy=Strategy.DPP,
-            parameters={"beta": beta},
+            diversity=diversity,
         )
     # Normalize feature vectors to unit length for cosine similarity
     feature_matrix = normalize_rows(feature_matrix)
@@ -97,5 +101,5 @@ def dpp(
         indices=selected_indices[:step],
         marginal_gains=marginal_gains[:step],
         strategy=Strategy.DPP,
-        parameters={"beta": beta},
+        diversity=diversity,
     )
