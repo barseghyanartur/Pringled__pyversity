@@ -2,7 +2,7 @@ from typing import Any, Callable
 
 import numpy as np
 import pytest
-from pyversity import Metric, Strategy, cover, diversify, dpp, mmr, msd
+from pyversity import Metric, Strategy, cover, diversify, dpp, mmr, msd, ssd
 from pyversity.datatypes import DiversificationResult
 
 
@@ -177,6 +177,76 @@ def test_dpp() -> None:
     assert np.all(res.selection_scores[:-1] + 1e-7 >= res.selection_scores[1:])
 
 
+def test_ssd() -> None:
+    """Test SSD strategy with various diversity settings (1=diverse, 0=relevance)."""
+    emb = np.eye(3, dtype=np.float32)
+    scores = np.array([0.1, 0.8, 0.3], dtype=np.float32)
+
+    # Relevance-only (diversity=0): picks top-k by scores
+    res = ssd(emb, scores, k=2, diversity=0.0)
+    expected = np.array([1, 2], dtype=np.int32)
+    assert np.array_equal(res.indices, expected)
+    assert np.allclose(res.selection_scores, scores[expected])
+
+    # Balanced coverage (diversity=0.5, gamma=0.5): picks diverse set
+    res = ssd(emb, scores, k=2, diversity=0.5, gamma=0.5)
+    assert res.indices[0] == 1 and res.indices[1] in (0, 2)
+
+    # Parameter validation
+    with pytest.raises(ValueError):
+        ssd(emb, scores, k=2, diversity=-0.01)
+    with pytest.raises(ValueError):
+        ssd(emb, scores, k=2, diversity=1.01)
+    with pytest.raises(ValueError):
+        ssd(emb, scores, k=2, gamma=0.0)
+    with pytest.raises(ValueError):
+        ssd(emb, scores, k=2, gamma=-0.5)
+    with pytest.raises(ValueError):
+        ssd(emb, scores, k=2, window=0)
+
+    # recent_embeddings validation: must be 2D
+    with pytest.raises(ValueError):
+        ssd(emb, scores, k=2, diversity=0.5, recent_embeddings=np.array([0.0, 1.0], dtype=np.float32))
+
+    # recent_embeddings validation: dim mismatch with embeddings
+    with pytest.raises(ValueError):
+        ssd(emb, scores, k=2, diversity=0.5, recent_embeddings=np.ones((2, 4), dtype=np.float32))  # emb is (.,3)
+
+    # Early exit on empty input
+    emb = np.empty((0, 3), dtype=np.float32)
+    scores = np.array([], dtype=np.float32)
+    res = ssd(emb, scores, k=5)
+    assert res.indices.size == 0 and res.selection_scores.size == 0
+
+
+def test_ssd_recent_embeddings_avoids_recent_first_pick() -> None:
+    """Test that with equal relevance, the first pick should avoid the most recent item when context is seeded."""
+    # 3 orthogonal items (identity); equal scores
+    emb = np.eye(3, dtype=np.float32)
+    scores = np.array([0.5, 0.5, 0.5], dtype=np.float32)
+
+    # Seed recent history with item 1 (oldest->newest)
+    recent = emb[[1]]  # the user just saw item 1
+    res = ssd(emb, scores, k=2, diversity=0.5, gamma=1.0, window=2, recent_embeddings=recent)
+
+    # First selection should not be the recent item (index 1) because its residual vs. context is ~0
+    assert res.indices[0] in (0, 2)
+    assert res.indices[0] != 1
+
+
+def test_ssd_recent_embeddings_window_blocks_multiple_recent() -> None:
+    """Test that if the window contains two recent items, the first pick should avoid both when scores are tied."""
+    emb = np.eye(4, dtype=np.float32)
+    scores = np.ones(4, dtype=np.float32)  # tie
+
+    # Seed with items 0 and 1 (oldest->newest), window=2
+    recent = emb[[0, 1]]
+    res = ssd(emb, scores, k=3, diversity=0.6, gamma=1.0, window=2, recent_embeddings=recent)
+
+    # The first pick should be from {2,3}, not {0,1}
+    assert res.indices[0] in (2, 3)
+
+
 @pytest.mark.parametrize(
     "strategy, fn, kwargs",
     [
@@ -184,6 +254,7 @@ def test_dpp() -> None:
         (Strategy.MSD, msd, {"diversity": 0.5, "metric": Metric.COSINE, "normalize": True}),
         (Strategy.COVER, cover, {"diversity": 0.5, "gamma": 0.5}),
         (Strategy.DPP, dpp, {"diversity": 0.5}),
+        (Strategy.SSD, ssd, {"diversity": 0.5}),
     ],
 )
 def test_diversify(strategy: Strategy, fn: Callable[..., DiversificationResult], kwargs: Any) -> None:
