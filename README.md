@@ -219,6 +219,35 @@ result = diversify(
 
 </details>
 
+<details> <summary><b>Advanced Usage</b> — Customizing Strategies</summary> <br
+
+Some strategies support additional parameters. For example, the SSD (Sliding Spectrum Decomposition) strategy allows you to provide a set of `recent_embeddings` to encourage novelty relative to recently shown items. In addition to calling the supported strategies via the `diversify` function, you can also call them directly. For example, using SSD directly:
+
+```python
+from pyversity import ssd
+import numpy as np
+
+items_to_select = 10 # Number of items to select
+
+new_embeddings = np.random.randn(100, 256) # Embeddings of candidate items
+new_scores = np.random.rand(100) # Relevance scores of candidate items
+recent_embeddings = np.random.randn(items_to_select, 256) # Embeddings of recently shown items
+
+# Sequence-aware diversification with SSD
+result = ssd(
+    embeddings=new_embeddings,
+    scores=new_scores,
+    k=items_to_select, # Number of items to select
+    diversity=0.5,# Diversity parameter (higher values prioritize diversity)
+    recent_embeddings=recent_embeddings, # Embeddings of recently shown items
+    # More SSD specific parameters can be set as needed
+)
+
+# Update the rolling context window by adding the newly selected items to recent embeddings
+recent = np.vstack([recent_embeddings, new_embeddings[result.indices]])[-items_to_select:]
+```
+</details>
+
 ## References
 
 The implementations in this package are based on the following research papers:
